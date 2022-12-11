@@ -3,12 +3,12 @@ package io.github.takusan23.telephoneymanagerapi
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.telephony.TelephonyManager
+import android.telephony.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -24,8 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.takusan23.telephoneymanagerapi.ui.theme.TelephoneyManagerAPITheme
-import java.io.File
-import java.io.FileOutputStream
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 
@@ -48,6 +47,7 @@ enum class Page {
     STRENGTH,
     METHOD,
     FIELD,
+    CALLBACK,
 }
 
 @SuppressLint("MissingPermission")
@@ -57,6 +57,36 @@ fun HomeScreen() {
     val telephonyManager = remember { context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager }
     val searchWord = remember { mutableStateOf("") }
     val currentPage = remember { mutableStateOf(Page.CELL_INFO) }
+
+    val callbackSignalStrengthPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val callbackCellInfoPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val callbackDisplayInfoPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    DisposableEffect(key1 = searchWord.value) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val callback = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener, TelephonyCallback.CellInfoListener, TelephonyCallback.DisplayInfoListener {
+                override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
+                    callbackSignalStrengthPair.value = signalStrength.javaClass.sageInvokeAndGet(signalStrength).filterWord(searchWord.value)
+                }
+
+                override fun onCellInfoChanged(cellInfoList: MutableList<CellInfo>) {
+                    callbackCellInfoPair.value = cellInfoList.map { cellInfo ->
+                        cellInfo.javaClass.sageInvokeAndGet(cellInfo).filterWord(searchWord.value)
+                    }.flatten()
+                }
+
+                override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
+                    callbackDisplayInfoPair.value = telephonyDisplayInfo.javaClass.sageInvokeAndGet(telephonyDisplayInfo).filterWord(searchWord.value)
+                }
+            }
+            telephonyManager.registerTelephonyCallback(context.mainExecutor, callback)
+            onDispose {
+                telephonyManager.unregisterTelephonyCallback(callback)
+            }
+        } else {
+            onDispose { /* do nothing */ }
+        }
+    }
 
     // プロパティ全部取得する
     val propertyList = remember(searchWord.value) {
@@ -120,6 +150,15 @@ ${getAllCellInfoResult.joinToString(separator = "\n") { "${it.first} = ${it.seco
 getSignalStrengthResult ---
 ${getSignalStrengthResult.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
+callbackSignalStrengthPair ---
+${callbackSignalStrengthPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
+callbackCellInfoPair ---
+${callbackCellInfoPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
+callbackDisplayInfoPair ---
+${callbackDisplayInfoPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
 methodList ---
 ${methodList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
@@ -144,7 +183,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
             }
         }
         item {
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = currentPage.value.ordinal,
                 backgroundColor = Color.Transparent
             ) {
@@ -214,6 +253,43 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
             }
+            Page.CALLBACK -> {
+                item {
+                    Text(
+                        text = "SignalStrength",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(callbackSignalStrengthPair.value) { (name, value) ->
+                    Text(text = "${name} = ${value}")
+                    Divider()
+                }
+
+                item {
+                    Text(
+                        text = "CellInfo",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(callbackCellInfoPair.value) { (name, value) ->
+                    Text(text = "${name} = ${value}")
+                    Divider()
+                }
+
+                item {
+                    Text(
+                        text = "DisplayInfo",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(callbackDisplayInfoPair.value) { (name, value) ->
+                    Text(text = "${name} = ${value}")
+                    Divider()
+                }
+            }
         }
     }
 }
@@ -223,6 +299,8 @@ private val Method.joinNameAndClassName: String
 
 private val Field.joinNameAndClassName: String
     get() = "${declaringClass.simpleName}.${name}"
+
+private fun <T : Any> Class<T>.sageInvokeAndGet(obj: Any) = declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(obj) } + declaredFields.map { it.joinNameAndClassName to it.safeString(obj) }
 
 private fun Method.safeInvoke(obj: Any): String = runCatching { apply { isAccessible = true }.invoke(obj) }.onFailure { it.javaClass.simpleName }.getOrNull().toString()
 
