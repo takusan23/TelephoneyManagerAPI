@@ -25,12 +25,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.takusan23.telephoneymanagerapi.ui.theme.TelephoneyManagerAPITheme
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Field
 import java.lang.reflect.Method
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        HiddenApiBypass.addHiddenApiExemptions("")
+
         setContent {
             TelephoneyManagerAPITheme {
                 // A surface container using the 'background' color from the theme
@@ -45,6 +48,7 @@ class MainActivity : ComponentActivity() {
 enum class Page {
     CELL_INFO,
     STRENGTH,
+    SERVICE_STATE,
     METHOD,
     FIELD,
     CALLBACK,
@@ -61,10 +65,11 @@ fun HomeScreen() {
     val callbackSignalStrengthPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     val callbackCellInfoPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
     val callbackDisplayInfoPair = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+    val callbackServiceState = remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
 
     DisposableEffect(key1 = searchWord.value) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val callback = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener, TelephonyCallback.CellInfoListener, TelephonyCallback.DisplayInfoListener {
+            val callback = object : TelephonyCallback(), TelephonyCallback.SignalStrengthsListener, TelephonyCallback.CellInfoListener, TelephonyCallback.DisplayInfoListener, TelephonyCallback.ServiceStateListener {
                 override fun onSignalStrengthsChanged(signalStrength: SignalStrength) {
                     callbackSignalStrengthPair.value = signalStrength.javaClass.sageInvokeAndGet(signalStrength).filterWord(searchWord.value)
                 }
@@ -77,6 +82,10 @@ fun HomeScreen() {
 
                 override fun onDisplayInfoChanged(telephonyDisplayInfo: TelephonyDisplayInfo) {
                     callbackDisplayInfoPair.value = telephonyDisplayInfo.javaClass.sageInvokeAndGet(telephonyDisplayInfo).filterWord(searchWord.value)
+                }
+
+                override fun onServiceStateChanged(serviceState: ServiceState) {
+                    callbackServiceState.value = serviceState.javaClass.sageInvokeAndGet(serviceState).filterWord(searchWord.value)
                 }
             }
             telephonyManager.registerTelephonyCallback(context.mainExecutor, callback)
@@ -129,9 +138,17 @@ fun HomeScreen() {
             returnList += identityClazz.declaredFields.map { it.joinNameAndClassName to it.safeString(cellInfo.cellIdentity) }
             returnList += signalClazz.declaredFields.map { it.joinNameAndClassName to it.safeString(cellInfo.cellSignalStrength) }
             returnList += method.map { it.name to it.safeInvoke(cellInfo) }
-            returnList += field.map { it.name to it?.get(cellInfo).toString() }
+            returnList += field.map { it.name to it?.safeString(cellInfo).toString() }
             returnList
         }.flatten().filterWord(searchWord.value)
+    }
+
+    // getServiceState
+    val getServiceStateResult = remember(searchWord.value) {
+        val serviceState = telephonyManager.serviceState ?: emptyList<Pair<String, String>>()
+        val methodList = serviceState.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(serviceState) }
+        val fieldList = serviceState.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(serviceState) }
+        (methodList + fieldList).filterWord(searchWord.value)
     }
 
     /** 保存する */
@@ -150,6 +167,9 @@ ${getAllCellInfoResult.joinToString(separator = "\n") { "${it.first} = ${it.seco
 getSignalStrengthResult ---
 ${getSignalStrengthResult.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
+getServiceState ---
+${getServiceStateResult.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
 callbackSignalStrengthPair ---
 ${callbackSignalStrengthPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
@@ -158,6 +178,9 @@ ${callbackCellInfoPair.value.joinToString(separator = "\n") { "${it.first} = ${i
 
 callbackDisplayInfoPair ---
 ${callbackDisplayInfoPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
+callbackServiceState ---
+${callbackServiceState.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
 methodList ---
 ${methodList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
@@ -227,6 +250,19 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
             }
+            Page.SERVICE_STATE -> {
+                item {
+                    Text(
+                        text = "getServiceState",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(getServiceStateResult) { (name, value) ->
+                    Text(text = "${name} = ${value}")
+                    Divider()
+                }
+            }
             Page.METHOD -> {
                 item {
                     Text(
@@ -280,6 +316,18 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
                 item {
                     Text(
+                        text = "ServiceInfo",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(callbackServiceState.value) { (name, value) ->
+                    Text(text = "${name} = ${value}")
+                    Divider()
+                }
+
+                item {
+                    Text(
                         text = "DisplayInfo",
                         fontSize = 30.sp
                     )
@@ -302,8 +350,8 @@ private val Field.joinNameAndClassName: String
 
 private fun <T : Any> Class<T>.sageInvokeAndGet(obj: Any) = declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(obj) } + declaredFields.map { it.joinNameAndClassName to it.safeString(obj) }
 
-private fun Method.safeInvoke(obj: Any): String = runCatching { apply { isAccessible = true }.invoke(obj) }.onFailure { it.javaClass.simpleName }.getOrNull().toString()
+private fun Method.safeInvoke(obj: Any): String = runCatching { apply { isAccessible = true }.invoke(obj) }.onFailure { it.javaClass.simpleName }.map { (it as? IntArray)?.toList() ?: it }.getOrNull().toString()
 
-private fun Field.safeString(obj: Any): String = this.apply { isAccessible = true }.get(obj)!!.toString()
+private fun Field.safeString(obj: Any): String = this.apply { isAccessible = true }.get(obj)?.toString() ?: "error"
 
 private fun Collection<Pair<String, String>>.filterWord(word: String) = filter { it.first.contains(word) || it.second.contains(word) }
