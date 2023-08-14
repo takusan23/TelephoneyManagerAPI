@@ -57,9 +57,10 @@ enum class Page {
     CELL_INFO,
     STRENGTH,
     SERVICE_STATE,
+    CARRIER_CONFIG,
     METHOD,
     FIELD,
-    CALLBACK,
+    CALLBACK
 }
 
 @SuppressLint("MissingPermission")
@@ -133,8 +134,8 @@ fun HomeScreen() {
     val getAllCellInfoResult = remember(searchWord.value) {
         telephonyManager.allCellInfo.map { cellInfo ->
             val clazz = cellInfo.javaClass
-            val method = clazz.declaredMethods
-            val field = clazz.declaredFields
+            val method = (clazz.declaredMethods + clazz.methods)
+            val field = (clazz.declaredFields + clazz.fields)
             val identityClazz = cellInfo.cellIdentity.javaClass
             val signalClazz = cellInfo.cellSignalStrength.javaClass
 
@@ -157,6 +158,17 @@ fun HomeScreen() {
         (methodList + fieldList).filterWord(searchWord.value)
     }
 
+    // CarrierConfig
+    val getCarrierConfigResult = remember(searchWord.value) {
+        val carrierConfig = telephonyManager.carrierConfig
+        // CarrierConfig の各値を取得する
+        val valueList = carrierConfig.keySet().map { key -> key to carrierConfig.get(key).toString() }
+        // メソッド
+        val methodList = carrierConfig.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(carrierConfig) }
+        val fieldList = carrierConfig.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(carrierConfig) }
+        (valueList + methodList + fieldList).filterWord(searchWord.value)
+    }
+
     /** 保存する */
     fun saveToTextFile() {
         val values = ContentValues().apply {
@@ -175,6 +187,9 @@ ${getSignalStrengthResult.joinToString(separator = "\n") { "${it.first} = ${it.s
 
 getServiceState ---
 ${getServiceStateResult.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
+
+getCarrierConfig ---
+${getCarrierConfigResult.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
 
 callbackSignalStrengthPair ---
 ${callbackSignalStrengthPair.value.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
@@ -264,6 +279,20 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(getServiceStateResult) { (name, value) ->
+                    Text(text = "$name = $value")
+                    Divider()
+                }
+            }
+
+            Page.CARRIER_CONFIG -> {
+                item {
+                    Text(
+                        text = "CarrierConfig",
+                        fontSize = 30.sp
+                    )
+                    Divider()
+                }
+                items(getCarrierConfigResult) { (name, value) ->
                     Text(text = "$name = $value")
                     Divider()
                 }
