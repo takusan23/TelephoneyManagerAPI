@@ -9,18 +9,24 @@ import android.provider.MediaStore
 import android.telephony.*
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Divider
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,15 +36,17 @@ import java.lang.reflect.Field
 import java.lang.reflect.Method
 
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         HiddenApiBypass.addHiddenApiExemptions("")
 
         setContent {
             TelephoneyManagerAPITheme {
-                // A surface container using the 'background' color from the theme
-                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
-                    HomeScreen()
+                Scaffold {
+                    Box(modifier = Modifier.padding(it)) {
+                        HomeScreen()
+                    }
                 }
             }
         }
@@ -89,9 +97,7 @@ fun HomeScreen() {
                 }
             }
             telephonyManager.registerTelephonyCallback(context.mainExecutor, callback)
-            onDispose {
-                telephonyManager.unregisterTelephonyCallback(callback)
-            }
+            onDispose { telephonyManager.unregisterTelephonyCallback(callback) }
         } else {
             onDispose { /* do nothing */ }
         }
@@ -206,10 +212,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
             }
         }
         item {
-            ScrollableTabRow(
-                selectedTabIndex = currentPage.value.ordinal,
-                backgroundColor = Color.Transparent
-            ) {
+            ScrollableTabRow(selectedTabIndex = currentPage.value.ordinal) {
                 Page.values().forEach {
                     Tab(
                         selected = it == currentPage.value,
@@ -232,11 +235,12 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     )
                     Divider()
                 }
-                items(getAllCellInfoResult) {
-                    Text(text = "${it.first} = ${it.second}")
+                items(getAllCellInfoResult) { (name, value) ->
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }
+
             Page.STRENGTH -> {
                 item {
                     Text(
@@ -246,10 +250,11 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(getSignalStrengthResult) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }
+
             Page.SERVICE_STATE -> {
                 item {
                     Text(
@@ -259,10 +264,11 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(getServiceStateResult) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }
+
             Page.METHOD -> {
                 item {
                     Text(
@@ -272,10 +278,11 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(methodList) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }
+
             Page.FIELD -> {
                 item {
                     Text(
@@ -285,10 +292,11 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(propertyList) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }
+
             Page.CALLBACK -> {
                 item {
                     Text(
@@ -298,7 +306,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(callbackSignalStrengthPair.value) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
 
@@ -310,7 +318,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(callbackCellInfoPair.value) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
 
@@ -322,7 +330,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(callbackServiceState.value) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
 
@@ -334,7 +342,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
                     Divider()
                 }
                 items(callbackDisplayInfoPair.value) { (name, value) ->
-                    Text(text = "${name} = ${value}")
+                    Text(text = "$name = $value")
                     Divider()
                 }
             }

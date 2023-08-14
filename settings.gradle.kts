@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "TelephoneyManagerAPI"
-include ':app'
+include(":app")
