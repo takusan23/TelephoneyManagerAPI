@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
 import android.telephony.*
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -24,12 +25,18 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import io.github.takusan23.telephoneymanagerapi.ui.theme.TelephoneyManagerAPITheme
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Field
@@ -67,7 +74,11 @@ enum class Page {
 @Composable
 fun HomeScreen() {
     val context = LocalContext.current
-    val telephonyManager = remember { context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val telephonyManager = remember {
+        (context.getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager)
+            .createForSubscriptionId(SubscriptionManager.getActiveDataSubscriptionId())
+    }
     val searchWord = remember { mutableStateOf("") }
     val currentPage = remember { mutableStateOf(Page.CELL_INFO) }
 
@@ -105,34 +116,44 @@ fun HomeScreen() {
     }
 
     // プロパティ全部取得する
-    val propertyList = remember(searchWord.value) {
-        TelephonyManager::class.java.declaredFields
-            .map {
-                it.joinNameAndClassName to it.safeString(telephonyManager)
-            }.filterWord(searchWord.value) // フィルターする拡張関数を書いた
-    }
+    var propertyList by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
 
     // 存在するメソッドも呼び出す
     // 引数がないもののみ
-    val methodList = remember(searchWord.value) {
-        TelephonyManager::class.java.declaredMethods
+    var methodList by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    // getSignalStrength
+    var getSignalStrengthResult by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    // getAllCellInfo
+    var getAllCellInfoResult by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    // getServiceState
+    var getServiceStateResult by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    // CarrierConfig
+    var getCarrierConfigResult by remember { mutableStateOf<List<Pair<String, String>>>(emptyList()) }
+
+    fun updateState() {
+        propertyList = TelephonyManager::class.java.declaredFields
+            .map {
+                it.joinNameAndClassName to it.safeString(telephonyManager)
+            }.filterWord(searchWord.value) // フィルターする拡張関数を書いた
+
+        methodList = TelephonyManager::class.java.declaredMethods
             .filter { it.parameterCount == 0 }
             .map {
                 // システム権限が必要な場合例外投げるので
                 it.joinNameAndClassName to it.safeInvoke(telephonyManager)
             }.filterWord(searchWord.value) // フィルターする拡張関数を書いた
-    }
 
-    val getSignalStrengthResult = remember(searchWord.value) {
-        val signalStrength = telephonyManager.signalStrength ?: emptyList<Pair<String, String>>()
-        val methodList = signalStrength.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(signalStrength) }
-        val fieldList = signalStrength.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(signalStrength) }
-        (methodList + fieldList).filterWord(searchWord.value)
-    }
+        getSignalStrengthResult = (telephonyManager.signalStrength ?: emptyList<Pair<String, String>>()).let { signalStrength ->
+            val methodList = signalStrength.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(signalStrength) }
+            val fieldList = signalStrength.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(signalStrength) }
+            (methodList + fieldList).filterWord(searchWord.value)
+        }
 
-    // getAllCellInfo
-    val getAllCellInfoResult = remember(searchWord.value) {
-        telephonyManager.allCellInfo.map { cellInfo ->
+        getAllCellInfoResult = telephonyManager.allCellInfo.map { cellInfo ->
             val clazz = cellInfo.javaClass
             val method = (clazz.declaredMethods + clazz.methods)
             val field = (clazz.declaredFields + clazz.fields)
@@ -148,25 +169,38 @@ fun HomeScreen() {
             returnList += field.map { it.name to it?.safeString(cellInfo).toString() }
             returnList
         }.flatten().filterWord(searchWord.value)
+
+        getServiceStateResult = (telephonyManager.serviceState ?: emptyList<Pair<String, String>>()).let { serviceState ->
+            val methodList = serviceState.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(serviceState) }
+            val fieldList = serviceState.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(serviceState) }
+            (methodList + fieldList).filterWord(searchWord.value)
+        }
+
+        getCarrierConfigResult = telephonyManager.carrierConfig.let { carrierConfig ->
+            // CarrierConfig の各値を取得する
+            val valueList = carrierConfig.keySet().map { key -> key to carrierConfig.get(key).toString() }
+            // メソッド
+            val methodList = carrierConfig.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(carrierConfig) }
+            val fieldList = carrierConfig.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(carrierConfig) }
+            (valueList + methodList + fieldList).filterWord(searchWord.value)
+        }
     }
 
-    // getServiceState
-    val getServiceStateResult = remember(searchWord.value) {
-        val serviceState = telephonyManager.serviceState ?: emptyList<Pair<String, String>>()
-        val methodList = serviceState.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(serviceState) }
-        val fieldList = serviceState.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(serviceState) }
-        (methodList + fieldList).filterWord(searchWord.value)
+    // キーワード変化時に
+    LaunchedEffect(key1 = searchWord.value) {
+        updateState()
     }
 
-    // CarrierConfig
-    val getCarrierConfigResult = remember(searchWord.value) {
-        val carrierConfig = telephonyManager.carrierConfig
-        // CarrierConfig の各値を取得する
-        val valueList = carrierConfig.keySet().map { key -> key to carrierConfig.get(key).toString() }
-        // メソッド
-        val methodList = carrierConfig.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(carrierConfig) }
-        val fieldList = carrierConfig.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(carrierConfig) }
-        (valueList + methodList + fieldList).filterWord(searchWord.value)
+    // onStart のたびに（画面表示時に）
+    DisposableEffect(key1 = Unit) {
+        val observer = object : DefaultLifecycleObserver {
+            override fun onStart(owner: LifecycleOwner) {
+                super.onStart(owner)
+                updateState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     /** 保存する */
@@ -211,6 +245,7 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
             """.trimIndent()
             it.write(text.toByteArray(Charsets.UTF_8))
         }
+        Toast.makeText(context, "保存しました", Toast.LENGTH_SHORT).show()
     }
 
     LazyColumn {
