@@ -6,19 +6,23 @@ import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
-import android.telephony.*
+import android.telephony.CellInfo
+import android.telephony.ServiceState
+import android.telephony.SignalStrength
+import android.telephony.SubscriptionManager
+import android.telephony.TelephonyCallback
+import android.telephony.TelephonyDisplayInfo
+import android.telephony.TelephonyManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.*
 import androidx.compose.material3.Button
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.ScrollableTabRow
@@ -33,11 +37,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.github.takusan23.telephoneymanagerapi.ui.theme.TelephoneyManagerAPITheme
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Field
@@ -52,11 +56,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             TelephoneyManagerAPITheme {
-                Scaffold {
-                    Box(modifier = Modifier.padding(it)) {
-                        HomeScreen()
-                    }
-                }
+                HomeScreen()
             }
         }
     }
@@ -250,166 +250,168 @@ ${propertyList.joinToString(separator = "\n") { "${it.first} = ${it.second}" }}
         Toast.makeText(context, "保存しました", Toast.LENGTH_SHORT).show()
     }
 
-    LazyColumn {
-        item {
-            Row {
-                OutlinedTextField(
-                    value = searchWord.value,
-                    label = { Text(text = "検索") },
-                    onValueChange = { searchWord.value = it }
-                )
-                Button(onClick = { saveToTextFile() }) {
-                    Text(text = "保存")
-                }
-            }
-        }
-        item {
-            ScrollableTabRow(selectedTabIndex = currentPage.value.ordinal) {
-                Page.values().forEach {
-                    Tab(
-                        selected = it == currentPage.value,
-                        onClick = { currentPage.value = it },
-                    ) {
-                        Text(
-                            modifier = Modifier.padding(10.dp),
-                            text = it.name
-                        )
+    Scaffold { innerPadding ->
+        LazyColumn(contentPadding = innerPadding) {
+            item {
+                Row {
+                    OutlinedTextField(
+                        value = searchWord.value,
+                        label = { Text(text = "検索") },
+                        onValueChange = { searchWord.value = it }
+                    )
+                    Button(onClick = { saveToTextFile() }) {
+                        Text(text = "保存")
                     }
                 }
             }
-        }
-        when (currentPage.value) {
-            Page.CELL_INFO -> {
-                item {
-                    Text(
-                        text = "getAllCellInfo",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(getAllCellInfoResult) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-            }
-
-            Page.STRENGTH -> {
-                item {
-                    Text(
-                        text = "getSignalStrength",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(getSignalStrengthResult) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
+            item {
+                ScrollableTabRow(selectedTabIndex = currentPage.value.ordinal) {
+                    Page.entries.forEach {
+                        Tab(
+                            selected = it == currentPage.value,
+                            onClick = { currentPage.value = it },
+                        ) {
+                            Text(
+                                modifier = Modifier.padding(10.dp),
+                                text = it.name
+                            )
+                        }
+                    }
                 }
             }
-
-            Page.SERVICE_STATE -> {
-                item {
-                    Text(
-                        text = "getServiceState",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(getServiceStateResult) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-            }
-
-            Page.CARRIER_CONFIG -> {
-                item {
-                    Text(
-                        text = "CarrierConfig",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(getCarrierConfigResult) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-            }
-
-            Page.METHOD -> {
-                item {
-                    Text(
-                        text = "メソッド",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(methodList) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-            }
-
-            Page.FIELD -> {
-                item {
-                    Text(
-                        text = "フィールド",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(propertyList) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-            }
-
-            Page.CALLBACK -> {
-                item {
-                    Text(
-                        text = "SignalStrength",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(callbackSignalStrengthPair.value) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
+            when (currentPage.value) {
+                Page.CELL_INFO -> {
+                    item {
+                        Text(
+                            text = "getAllCellInfo",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(getAllCellInfoResult) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
                 }
 
-                item {
-                    Text(
-                        text = "CellInfo",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(callbackCellInfoPair.value) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
-                }
-
-                item {
-                    Text(
-                        text = "ServiceInfo",
-                        fontSize = 30.sp
-                    )
-                    Divider()
-                }
-                items(callbackServiceState.value) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
+                Page.STRENGTH -> {
+                    item {
+                        Text(
+                            text = "getSignalStrength",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(getSignalStrengthResult) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
                 }
 
-                item {
-                    Text(
-                        text = "DisplayInfo",
-                        fontSize = 30.sp
-                    )
-                    Divider()
+                Page.SERVICE_STATE -> {
+                    item {
+                        Text(
+                            text = "getServiceState",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(getServiceStateResult) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
                 }
-                items(callbackDisplayInfoPair.value) { (name, value) ->
-                    Text(text = "$name = $value")
-                    Divider()
+
+                Page.CARRIER_CONFIG -> {
+                    item {
+                        Text(
+                            text = "CarrierConfig",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(getCarrierConfigResult) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+                }
+
+                Page.METHOD -> {
+                    item {
+                        Text(
+                            text = "メソッド",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(methodList) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+                }
+
+                Page.FIELD -> {
+                    item {
+                        Text(
+                            text = "フィールド",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(propertyList) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+                }
+
+                Page.CALLBACK -> {
+                    item {
+                        Text(
+                            text = "SignalStrength",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(callbackSignalStrengthPair.value) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+
+                    item {
+                        Text(
+                            text = "CellInfo",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(callbackCellInfoPair.value) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+
+                    item {
+                        Text(
+                            text = "ServiceInfo",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(callbackServiceState.value) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
+
+                    item {
+                        Text(
+                            text = "DisplayInfo",
+                            fontSize = 30.sp
+                        )
+                        HorizontalDivider()
+                    }
+                    items(callbackDisplayInfoPair.value) { (name, value) ->
+                        Text(text = "$name = $value")
+                        HorizontalDivider()
+                    }
                 }
             }
         }
