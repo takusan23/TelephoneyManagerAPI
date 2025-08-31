@@ -3,6 +3,7 @@ package io.github.takusan23.telephoneymanagerapi
 import android.annotation.SuppressLint
 import android.content.ContentValues
 import android.content.Context
+import android.os.BaseBundle
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -168,7 +169,7 @@ fun HomeScreen() {
             returnList += identityClazz.declaredFields.map { it.joinNameAndClassName to it.safeString(cellInfo.cellIdentity) }
             returnList += signalClazz.declaredFields.map { it.joinNameAndClassName to it.safeString(cellInfo.cellSignalStrength) }
             returnList += method.map { it.name to it.safeInvoke(cellInfo) }
-            returnList += field.map { it.name to it?.safeString(cellInfo).toString() }
+            returnList += field.map { it.name to it?.safeString(cellInfo).toCollectionSupportedString() }
             returnList
         }.flatten().filterWord(searchWord.value)
 
@@ -180,7 +181,7 @@ fun HomeScreen() {
 
         getCarrierConfigResult = telephonyManager.carrierConfig.let { carrierConfig ->
             // CarrierConfig の各値を取得する
-            val valueList = carrierConfig.keySet().map { key -> key to carrierConfig.get(key).toString() }
+            val valueList = carrierConfig.keySet().map { key -> key to carrierConfig.get(key).toCollectionSupportedString() }
             // メソッド
             val methodList = carrierConfig.javaClass.declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(carrierConfig) }
             val fieldList = carrierConfig.javaClass.declaredFields.map { it.joinNameAndClassName to it.safeString(carrierConfig) }
@@ -426,8 +427,28 @@ private val Field.joinNameAndClassName: String
 
 private fun <T : Any> Class<T>.sageInvokeAndGet(obj: Any) = declaredMethods.map { it.joinNameAndClassName to it.safeInvoke(obj) } + declaredFields.map { it.joinNameAndClassName to it.safeString(obj) }
 
-private fun Method.safeInvoke(obj: Any): String = runCatching { apply { isAccessible = true }.invoke(obj) }.onFailure { it.javaClass.simpleName }.map { (it as? IntArray)?.toList() ?: it }.getOrNull().toString()
+private fun Method.safeInvoke(obj: Any): String = runCatching { apply { isAccessible = true }.invoke(obj) }.onFailure { it.javaClass.simpleName }.map { (it as? IntArray)?.toList() ?: it }.getOrNull().toCollectionSupportedString()
 
-private fun Field.safeString(obj: Any): String = this.apply { isAccessible = true }.get(obj)?.toString() ?: "error"
+private fun Field.safeString(obj: Any): String = this.apply { isAccessible = true }.get(obj)?.toCollectionSupportedString() ?: "error"
 
 private fun Collection<Pair<String, String>>.filterWord(word: String) = filter { it.first.contains(word) || it.second.contains(word) }
+
+private fun <T> T.toCollectionSupportedString(): String = when (this) {
+    is Collection<*> -> this.toList().toString()
+    is Array<*> -> this.toList().toString()
+    is BooleanArray -> this.toList().toString()
+    is ByteArray -> this.toList().toString()
+    is CharArray -> this.toList().toString()
+    is DoubleArray -> this.toList().toString()
+    is FloatArray -> this.toList().toString()
+    is IntArray -> this.toList().toString()
+    is LongArray -> this.toList().toString()
+    is ShortArray -> this.toList().toString()
+
+    is BaseBundle -> this.keySet().joinToString { key ->
+        val stringValue = this.get(key).toCollectionSupportedString()
+        "$key = $stringValue"
+    }
+
+    else -> this.toString()
+}
